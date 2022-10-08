@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+# (c) YashDK [yash-dk@github]
+# Redesigned By - @bipuldey19 (https://github.com/SlamDevs/slam-mirrorbot/commit/1e572f4fa3625ecceb953ce6d3e7cf7334a4d542#diff-c3d91f56f4c5d8b5af3d856d15a76bd5f00aa38d712691b91501734940761bdd)
+
+from time import sleep, time
+from psutil import boot_time, disk_usage, net_io_counters
+from subprocess import check_output
+from os import path as ospath
 from logging import getLogger, FileHandler, StreamHandler, INFO, basicConfig
 from time import sleep
 from qbittorrentapi import NotFound404Error, Client as qbClient
@@ -7,9 +15,7 @@ from flask import Flask, request
 from web.nodes import make_tree
 
 app = Flask(__name__)
-
 aria2 = ariaAPI(ariaClient(host="http://localhost", port=6800, secret=""))
-
 basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     handlers=[FileHandler('log.txt'), StreamHandler()],
                     level=INFO)
@@ -23,7 +29,7 @@ page = """
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Torrent File Selector</title>
-    <link rel="icon" href="https://graph.org/file/1a6ad157f55bc42b548df.png" type="image/jpg">
+    <link rel="icon" href="https://graph.org/file/3dd461600304a74e82e0f.jpg" type="image/jpg">
     <script
       src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
       integrity="sha256-4+XzXVhsDmqanXGHaHvgh1gMQKX40OUvDEBTu8JcmNs="
@@ -213,7 +219,7 @@ input[type="submit"]:hover, input[type="submit"]:focus{
 <script>
 function s_validate() {
     if ($("input[name^='filenode_']:checked").length == 0) {
-        alert("Select one file at least!");
+        alert("Please select at least one file");
         return false;
         }
     }
@@ -224,16 +230,16 @@ function s_validate() {
     <header>
       <div class="brand">
         <img
-          src="https://graph.org/file/1a6ad157f55bc42b548df.png"
+          src="https://graph.org/file/3dd461600304a74e82e0f.jpg"
           alt="logo"
         />
-        <a href="https://t.me/krn2701">
+        <a href="https://t.me/FlashSpeedster">
           <h2 class="name">Qbittorrent Selection</h2>
         </a>
       </div>
       <div class="social">
-        <a href="https://github.com/weebzone/WZML"><i class="fab fa-github"></i></a>
-        <a href="https://t.me/krn2701"><i class="fab fa-telegram"></i></a>
+        <a href="https://t.me/FlashSpeedster"><i class="fab fa-github"></i></a>
+        <a href="https://t.me/FlashSpeedster"><i class="fab fa-telegram"></i></a>
       </div>
     </header>
     <div id="sticks">
@@ -420,7 +426,7 @@ code_page = """
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Torrent Code Checker</title>
-    <link rel="icon" href="https://graph.org/file/1a6ad157f55bc42b548df.png" type="image/jpg">
+    <link rel="icon" href="https://graph.org/file/3dd461600304a74e82e0f.jpg" type="image/jpg">
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -616,16 +622,16 @@ section span{
     <header>
       <div class="brand">
         <img
-          src="https://graph.org/file/1a6ad157f55bc42b548df.png"
+          src="https://graph.org/file/3dd461600304a74e82e0f.jpg"
           alt="logo"
         />
-        <a href="https://t.me/krn2701">
+        <a href="https://t.me/FlashSpeedster">
           <h2 class="name">Qbittorrent Selection</h2>
         </a>
       </div>
       <div class="social">
-        <a href="https://github.com/weebzone/WZML"><i class="fab fa-github"></i></a>
-        <a href="https://t.me/krn2701"><i class="fab fa-telegram"></i></a>
+        <a href="https://github.com/codewithweeb/mirror-with-weeb"><i class="fab fa-github"></i></a>
+        <a href="https://t.me/FlashSpeedster"><i class="fab fa-telegram"></i></a>
       </div>
     </header>
     <section>
@@ -656,18 +662,21 @@ def re_verfiy(paused, resumed, client, hash_id):
         paused = paused.split("|")
     if resumed:
         resumed = resumed.split("|")
-
     k = 0
     while True:
+
         res = client.torrents_files(torrent_hash=hash_id)
         verify = True
+
         for i in res:
             if str(i.id) in paused and i.priority != 0:
                 verify = False
                 break
+
             if str(i.id) in resumed and i.priority == 0:
                 verify = False
                 break
+
         if verify:
             break
         LOGGER.info("Reverification Failed! Correcting stuff...")
@@ -697,7 +706,6 @@ def list_torrent_contents(id_):
 
     if "pin_code" not in request.args.keys():
         return code_page.replace("{form_url}", f"/app/files/{id_}")
-
     pincode = ""
     for nbr in id_:
         if nbr.isdigit():
@@ -716,6 +724,7 @@ def list_torrent_contents(id_):
         res = aria2.client.get_files(id_)
         cont = make_tree(res, True)
     return page.replace("{My_content}", cont[0]).replace("{form_url}", f"/app/files/{id_}?pin_code={pincode}")
+
 
 @app.route('/app/files/<string:id_>', methods=['POST'])
 def set_priority(id_):
@@ -772,9 +781,30 @@ def set_priority(id_):
             LOGGER.info(f"Verification Failed! Report! Gid: {id_}")
     return list_torrent_contents(id_)
 
+if ospath.exists('.git'):
+    commit_date = check_output(["git log -1 --date=format:'%y/%m/%d %H:%M' --pretty=format:'%cd'"], shell=True).decode()
+else:
+    commit_date = 'No UPSTREAM_REPO'
+
+@app.route('/status', methods=['GET'])
+def status():
+    uptime = time() - boot_time()
+    sent = net_io_counters().bytes_sent
+    recv = net_io_counters().bytes_recv
+    return {
+        'commit_date': commit_date,
+        'uptime': uptime,
+        'free_disk': disk_usage('.').free,
+        'total_disk': disk_usage('.').total,
+        'network': {
+            'sent': sent,
+            'recv': recv,
+        },
+    }
+
 @app.route('/')
 def homepage():
-    return "<h1>See mirror-with-weeb <a href='https://github.com/weebzone/WZML'>@GitHub</a> By <a href='https://github.com/weebzone'>Code With Weeb</a></h1>"
+    return "<h1>See ACE <a href='https://t.me/Ace_ML'>@Telegram</a> By <a href='https://t.me/FlashSpeedster'>➳⚡𝔗𝔥𝔢 𝔉𝔩𝔞𝔰𝔥⚡༻</a></h1>"
 
 @app.errorhandler(Exception)
 def page_not_found(e):
