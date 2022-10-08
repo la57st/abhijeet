@@ -15,7 +15,7 @@ from telegram.ext import CommandHandler
 import requests
 import pytz
 from bot import bot, dispatcher, updater, botStartTime, TIMEZONE, IGNORE_PENDING_REQUESTS, LOGGER, Interval, INCOMPLETE_TASK_NOTIFIER, \
-                    DB_URI, app, main_loop, SET_BOT_COMMANDS, AUTHORIZED_CHATS, EMOJI_THEME, \
+                    DB_URI, alive, app, main_loop, HEROKU_API_KEY, HEROKU_APP_NAME, SET_BOT_COMMANDS, AUTHORIZED_CHATS, EMOJI_THEME, \
                     START_BTN1_NAME, START_BTN1_URL, START_BTN2_NAME, START_BTN2_URL, CREDIT_NAME, TITLE_NAME, PICS, FINISHED_PROGRESS_STR, UN_FINISHED_PROGRESS_STR, \
                     SHOW_LIMITS_IN_STATS, LEECH_LIMIT, TORRENT_DIRECT_LIMIT, CLONE_LIMIT, MEGA_LIMIT, ZIP_UNZIP_LIMIT, TOTAL_TASKS_LIMIT, USER_TASKS_LIMIT, \
                     PIXABAY_API_KEY, PIXABAY_CATEGORY, PIXABAY_SEARCH, WALLCRAFT_CATEGORY, WALLTIP_SEARCH, WALLFLARE_SEARCH
@@ -29,8 +29,89 @@ from .helper.telegram_helper.filters import CustomFilters
 from .helper.telegram_helper.button_build import ButtonMaker
 from bot.modules.wayback import getRandomUserAgent
 from .modules import authorize, list, cancel_mirror, mirror_status, mirror_leech, clone, ytdlp, shell, eval, \
-                    delete, count, leech_settings, search, rss, wayback, speedtest, anilist, bt_select, mediainfo, hash, addons
+                    delete, count, leech_settings, search, rss, wayback, speedtest, usage, anilist, bt_select, mediainfo, hash, sleep, addons
 from datetime import datetime
+
+try: import heroku3
+except ModuleNotFoundError: srun("pip install heroku3", capture_output=False, shell=True)
+try: import heroku3
+except Exception as f:
+    LOGGER.warning("heroku3 cannot imported. add to your deployer requirements.txt file.")
+    LOGGER.warning(f)
+    HEROKU_APP_NAME = None
+    HEROKU_API_KEY = None
+    
+def getHerokuDetails(h_api_key, h_app_name):
+    try: import heroku3
+    except ModuleNotFoundError: run("pip install heroku3", capture_output=False, shell=True)
+    try: import heroku3
+    except Exception as f:
+        LOGGER.warning("heroku3 cannot imported. add to your deployer requirements.txt file.")
+        LOGGER.warning(f)
+        return None
+    if (not h_api_key) or (not h_app_name): return None
+    try:
+        heroku_api = "https://api.heroku.com"
+        Heroku = heroku3.from_key(h_api_key)
+        app = Heroku.app(h_app_name)
+        useragent = getRandomUserAgent()
+        user_id = Heroku.account().id
+        headers = {
+            "User-Agent": useragent,
+            "Authorization": f"Bearer {h_api_key}",
+            "Accept": "application/vnd.heroku+json; version=3.account-quotas",
+        }
+        path = "/accounts/" + user_id + "/actions/get-quota"
+        session = requests.Session()
+        result = (session.get(heroku_api + path, headers=headers)).json()
+        abc = ""
+        account_quota = result["account_quota"]
+        quota_used = result["quota_used"]
+        quota_remain = account_quota - quota_used
+        if EMOJI_THEME is True:
+            abc += f'<b></b>\n'
+            abc += f'<b>╭─《🌐 HEROKU STATS 🌐》</b>\n'
+            abc += f"<b>├ 💪🏻 FULL</b>: {get_readable_time(account_quota)}\n"
+            abc += f"<b>├ 👎🏻 USED</b>: {get_readable_time(quota_used)}\n"
+            abc += f"<b>├ 👍🏻 FREE</b>: {get_readable_time(quota_remain)}\n"
+        else:
+            abc += f'<b></b>\n'
+            abc += f'<b>╭─《 HEROKU STATS 》</b>\n'
+            abc += f"<b>├ FULL</b>: {get_readable_time(account_quota)}\n"
+            abc += f"<b>├ USED</b>: {get_readable_time(quota_used)}\n"
+            abc += f"<b>├ FREE</b>: {get_readable_time(quota_remain)}\n"
+        # App Quota
+        AppQuotaUsed = 0
+        OtherAppsUsage = 0
+        for apps in result["apps"]:
+            if str(apps.get("app_uuid")) == str(app.id):
+                try:
+                    AppQuotaUsed = apps.get("quota_used")
+                except Exception as t:
+                    LOGGER.error("error when adding main dyno")
+                    LOGGER.error(t)
+                    pass
+            else:
+                try:
+                    OtherAppsUsage += int(apps.get("quota_used"))
+                except Exception as t:
+                    LOGGER.error("error when adding other dyno")
+                    LOGGER.error(t)
+                    pass
+        LOGGER.info(f"This App: {str(app.name)}")
+        if EMOJI_THEME is True:
+            abc += f"<b>├ 🎃 APP USAGE:</b> {get_readable_time(AppQuotaUsed)}\n"
+            abc += f"<b>├ 🗑️ OTHER APP:</b> {get_readable_time(OtherAppsUsage)}\n"
+            abc += f'<b>╰─《 ☣️ {CREDIT_NAME} ☣️ 》</b>'
+        else:
+            abc += f"<b>├ APP USAGE:</b> {get_readable_time(AppQuotaUsed)}\n"
+            abc += f"<b>├ OTHER APP:</b> {get_readable_time(OtherAppsUsage)}\n"
+            abc += f'<b>╰─《 {CREDIT_NAME} 》</b>'
+        return abc
+    except Exception as g:
+        LOGGER.error(g)
+        return None
+
 
 def progress_bar(percentage):
     p_used = FINISHED_PROGRESS_STR
@@ -133,6 +214,10 @@ def stats(update, context):
                      f'<b>├  Total Tasks: </b>{total_task}\n'\
                      f'<b>╰  User Tasks: </b>{user_task}\n\n'
 
+                
+
+    heroku = getHerokuDetails(HEROKU_API_KEY, HEROKU_APP_NAME)
+    if heroku: stats += heroku 
     if PICS:
         sendPhoto(stats, context.bot, update.message, random.choice(PICS))
     else:
@@ -148,7 +233,7 @@ def start(update, context):
         buttons.buildbutton(f"{START_BTN2_NAME}", f"{START_BTN2_URL}")
     reply_markup = buttons.build_menu(2)
     if CustomFilters.authorized_user(update) or CustomFilters.authorized_chat(update):
-        start_string = f'''This bot can mirror all your links to Google Drive!
+        start_string = f'''The Ultimate Bot To Upload Files to "Telegram & Google Drive"
 Type /{BotCommands.HelpCommand} to get a list of available commands
 '''
         if PICS:
@@ -156,7 +241,7 @@ Type /{BotCommands.HelpCommand} to get a list of available commands
         else:
             sendMarkup(start_string, context.bot, update.message, reply_markup)
     else:
-        text = f"Not Authorized user, deploy your own mirror bot"
+        text = f"⛔ Access Denied 🙅‍♂️"
         if PICS:
             sendPhoto(text, context.bot, update.message, random.choice(PICS), reply_markup)
         else:
@@ -164,28 +249,60 @@ Type /{BotCommands.HelpCommand} to get a list of available commands
 
 
 def restart(update, context):
-    restart_message = sendMessage("Restarting...", context.bot, update.message)
-    if Interval:
-        Interval[0].cancel()
-        Interval.clear()
-    clean_all()
-    srun(["pkill", "-f", "gunicorn|aria2c|qbittorrent-nox|ffmpeg"])
-    srun(["python3", "update.py"])
-    with open(".restartmsg", "w") as f:
-        f.truncate(0)
-        f.write(f"{restart_message.chat.id}\n{restart_message.message_id}\n")
-    osexecl(executable, executable, "-m", "bot")
+    cmd = update.effective_message.text.split(' ', 1)
+    dynoRestart = False
+    dynoKill = False
+    if len(cmd) == 2:
+        dynoRestart = (cmd[1].lower()).startswith('d')
+        dynoKill = (cmd[1].lower()).startswith('k')
+    if (not HEROKU_API_KEY) or (not HEROKU_APP_NAME):
+        LOGGER.info("If you want Heroku features, fill HEROKU_APP_NAME HEROKU_API_KEY vars.")
+        dynoRestart = False
+        dynoKill = False
+    if dynoRestart:
+        LOGGER.info("🔴 Dyno Restarting 🔃")
+        restart_message = sendMessage("🔴 Dyno Restarting 🔃", context.bot, update.message)
+        with open(".restartmsg", "w") as f:
+            f.truncate(0)
+            f.write(f"{restart_message.chat.id}\n{restart_message.message_id}\n")
+        heroku_conn = heroku3.from_key(HEROKU_API_KEY)
+        app = heroku_conn.app(HEROKU_APP_NAME)
+        app.restart()
+    elif dynoKill:
+        LOGGER.info("Killing Dyno. MUHAHAHA")
+        sendMessage("Killed Dyno.", context.bot, update.message)
+        alive.kill()
+        clean_all()
+        heroku_conn = heroku3.from_key(HEROKU_API_KEY)
+        app = heroku_conn.app(HEROKU_APP_NAME)
+        proclist = app.process_formation()
+        for po in proclist:
+            app.process_formation()[po.type].scale(0)
+    else:
+        LOGGER.info("✨ Normally Restarting 🔃")
+        restart_message = sendMessage("✨ Normally Restarting 🔃", context.bot, update.message)
+        if Interval:
+            Interval[0].cancel()
+            Interval.clear()
+        alive.kill()
+        clean_all()
+        srun(["pkill", "-9", "-f", "gunicorn|chrome|firefox|megasdkrest|opera"])
+        srun(["python3", "update.py"])
+        with open(".restartmsg", "w") as f:
+            f.truncate(0)
+            f.write(f"{restart_message.chat.id}\n{restart_message.message_id}\n")
+        osexecl(executable, executable, "-m", "bot")
 
 
 def ping(update, context):
     if EMOJI_THEME is True:
         start_time = int(round(time() * 1000))
-        reply = sendMessage("Starting_Ping ⛔", context.bot, update.message)
+        reply = sendMessage("Starting_Ping 🎯", context.bot, update.message)
         end_time = int(round(time() * 1000))
         editMessage(f'{end_time - start_time} ms 🔥', reply)
     else:
         start_time = int(round(time() * 1000))
-        reply = sendMessage("Starting_Ping ", context.bot, update.message)
+        reply = sendMessage("Starting_Ping 🎯", context.bot, update.message)
         end_time = int(round(time() * 1000))
         editMessage(f'{end_time - start_time} ms ', reply)
 
@@ -194,7 +311,7 @@ def log(update, context):
 
 
 help_string = '''
-<b><a href='https://github.com/weebzone/WZML'>WeebZone</a></b> - The Ultimate Telegram MIrror-Leech Bot to Upload Your File & Link in Google Drive & Telegram
+<b><a href='https://t.me/FlashSpeedster'>➳⚡𝔗𝔥𝔢 𝔉𝔩𝔞𝔰𝔥⚡༻</a></b> - Our Ultimate Telegram Bot to Upload Your File & Link in Google Drive & Telegram 🙂
 Choose a help category:
 '''
 
@@ -271,9 +388,11 @@ help_string_telegraph_user = f'''
 <br>sites: <code>rarbg, 1337x, yts, etzv, tgx, torlock, piratebay, nyaasi, ettv</code><br><br>
 • <b>/{BotCommands.StatusCommand}</b>: Shows a status of all the downloads
 <br><br>
+• <b>/{BotCommands.UsageCommand}</b>: Shows Heroku App Dyno Usage
+<br><br>
 • <b>/{BotCommands.StatsCommand}</b>: Show Stats of the machine the bot is hosted on
 <br><br>
-• <b>/{BotCommands.SpeedCommand}</b>: Speedtest of server
+• <b>/{BotCommands.SpeedCommand}</b>: Speedtest of Heroku server
 <br><br>
 • <b>/weebhelp</b>: Okatu helper
 '''
@@ -296,6 +415,8 @@ help_string_telegraph_admin = f'''
 • <b>/{BotCommands.AddSudoCommand}</b>: Add sudo user (Only Owner)
 <br><br>
 • <b>/{BotCommands.RmSudoCommand}</b>: Remove sudo users (Only Owner)
+<br><br>
+• <b>/{BotCommands.RestartCommand}</b>: Restart and update the bot
 <br><br>
 • <b>/{BotCommands.PaidUsersCommand}</b>: Show Paid users (Only Owner & Sudo)
 <br><br>
@@ -355,6 +476,8 @@ if SET_BOT_COMMANDS:
         (f'{BotCommands.LeechSetCommand}','Leech settings'),
         (f'{BotCommands.SetThumbCommand}','Set thumbnail'),
         (f'{BotCommands.StatusCommand}','Get mirror status message'),
+        (f'{BotCommands.StatsCommand}','Bot usage stats'),
+        (f'{BotCommands.UsageCommand}','Heroku Dyno usage'),
         (f'{BotCommands.SpeedCommand}','Speedtest'),
         (f'{BotCommands.WayBackCommand}','Internet Archive'),
         (f'{BotCommands.MediaInfoCommand}','Get Information of telegram Files'),
@@ -362,7 +485,8 @@ if SET_BOT_COMMANDS:
         (f'{BotCommands.PingCommand}','Ping the bot'),
         (f'{BotCommands.RestartCommand}','Restart the bot'),
         (f'{BotCommands.LogCommand}','Get the bot Log'),
-        (f'{BotCommands.HelpCommand}','Get detailed help')
+        (f'{BotCommands.HelpCommand}','Get detailed help'),
+        (f'{BotCommands.SleepCommand}','Sleep Bot')
     ]
 
 
@@ -423,22 +547,22 @@ def main():
                 if ospath.isfile(".restartmsg"):
                     with open(".restartmsg") as f:
                         chat_id, msg_id = map(int, f)
-                    msg = f"😎Restarted successfully❗\n"
-                    msg += f"📅DATE: {date}\n"
-                    msg += f"⌚TIME: {time}\n"
-                    msg += f"🌐TIMEZONE: {TIMEZONE}\n"
+                    msg = f"😎 Restarted successfully ❗\n"
+                    msg += f"📅 DATE: {date}\n"
+                    msg += f"⌚ TIME: {time}\n"
+                    msg += f"🌐 TIMEZONE: {TIMEZONE}\n"
                 else:
-                    msg = f"😎Bot Restarted!\n"
-                    msg += f"📅DATE: {date}\n"
-                    msg += f"⌚TIME: {time}\n"
-                    msg += f"🌐TIMEZONE: {TIMEZONE}"
+                    msg = f"😎 Bot Restarted ❗\n"
+                    msg += f"📅 DATE: {date}\n"
+                    msg += f"⌚ TIME: {time}\n"
+                    msg += f"🌐 TIMEZONE: {TIMEZONE}"
 
                 for tag, links in data.items():
                      msg += f"\n{tag}: "
                      for index, link in enumerate(links, start=1):
                          msg += f" <a href='{link}'>{index}</a> |"
                          if len(msg.encode()) > 4000:
-                             if '😎Restarted successfully❗' in msg and cid == chat_id:
+                             if '😎 Restarted successfully ❗' in msg and cid == chat_id:
                                  bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTML', disable_web_page_preview=True)
                                  osremove(".restartmsg")
                              else:
@@ -447,7 +571,7 @@ def main():
                                  except Exception as e:
                                      LOGGER.error(e)
                              msg = ''
-                if '😎Restarted successfully❗' in msg and cid == chat_id:
+                if '😎 Restarted successfully ❗' in msg and cid == chat_id:
                      bot.editMessageText(msg, chat_id, msg_id, parse_mode='HTML', disable_web_page_preview=True)
                      osremove(".restartmsg")
                 else:
@@ -459,11 +583,11 @@ def main():
     if ospath.isfile(".restartmsg"):
         with open(".restartmsg") as f:
             chat_id, msg_id = map(int, f)
-        msg = f"😎Restarted successfully❗\n📅DATE: {date}\n⌚TIME: {time}\n🌐TIMEZONE: {TIMEZONE}\n"
+        msg = f"😎 Restarted successfully ❗\n📅 DATE: {date}\n⌚ TIME: {time}\n🌐 TIMEZONE: {TIMEZONE}\n"
         bot.edit_message_text(msg, chat_id, msg_id)
         osremove(".restartmsg")
     elif not notifier_dict and AUTHORIZED_CHATS:
-        text = f"😎Bot Restarted❗ \n📅DATE: {date} \n⌚TIME: {time} \n🌐TIMEZONE: {TIMEZONE}"
+        text = f"😎 Bot Restarted ❗ \n📅 DATE: {date} \n⌚ TIME: {time} \n🌐 TIMEZONE: {TIMEZONE}"
         for id_ in AUTHORIZED_CHATS:
             try:
                 bot.sendMessage(chat_id=id_, text=text, parse_mode=ParseMode.HTML)
@@ -488,7 +612,7 @@ def main():
     dispatcher.add_handler(stats_handler)
     dispatcher.add_handler(log_handler)
     updater.start_polling(drop_pending_updates=IGNORE_PENDING_REQUESTS)
-    LOGGER.info("💥𝐁𝐨𝐭 𝐒𝐭𝐚𝐫𝐭𝐞𝐝❗")
+    LOGGER.info("💥 Bot Started ❗")
     signal(SIGINT, exit_clean_up)
 
 app.start()
