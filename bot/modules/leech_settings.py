@@ -17,48 +17,50 @@ def getleechinfo(from_user):
     name = from_user.full_name
     buttons = button_build.ButtonMaker()
     thumbpath = f"Thumbnails/{user_id}.jpg"
-    prefix = PRE_DICT.get(user_id, "Not Exists")
-    caption = CAP_DICT.get(user_id, "Not Exists")
-    dumpid = LEECH_DICT.get(user_id, "Not Exists")
+    prefix = PRE_DICT.get(user_id, "⛔")
+    caption = CAP_DICT.get(user_id, "⛔")
+    dumpid = LEECH_DICT.get(user_id, "⛔")
     if (
         user_id in AS_DOC_USERS
         or user_id not in AS_MEDIA_USERS
         and AS_DOCUMENT
     ):
-        ltype = "DOCUMENT"
+        ltype = "DOCUMENT 📂"
         buttons.sbutton("Send As Media", f"leechset {user_id} med")
     else:
-        ltype = "MEDIA"
+        ltype = "MEDIA 🎥"
         buttons.sbutton("Send As Document", f"leechset {user_id} doc")
-        
-    uplan = "Paid User" if user_id in PAID_USERS else "Normal User"
+
+
+    uplan = "PAID 🌟" if user_id in PAID_USERS else "🆓"
 
     if ospath.exists(thumbpath):
-        thumbmsg = "Exists"
-        buttons.sbutton("Delete Thumbnail", f"leechset {user_id} thumb")
-        buttons.sbutton("Show Thumbnail", f"leechset {user_id} showthumb")
+        thumbmsg = "✅"
+        buttons.sbutton("🗑️ Remove Thumbnail", f"leechset {user_id} thumb")
+        buttons.sbutton("🖼️ View Thumbnail", f"leechset {user_id} showthumb")
     else:
-        thumbmsg = "Not Exists"
+        thumbmsg = "⛔"
 
-    if prefix != "Not Exists":
-        buttons.sbutton("Delete Prename", f"leechset {user_id} prename")
 
-    if caption != "Not Exists": 
-        buttons.sbutton("Delete Caption", f"leechset {user_id} cap")
+    if prefix != "⛔":
+        buttons.sbutton("🗑️ Remove PreName", f"leechset {user_id} prename")
 
-    if dumpid != "Not Exists":
-        buttons.sbutton("Delete DumpID", f"leechset {user_id} dump")
+    if caption != "⛔": 
+        buttons.sbutton("🗑️ Remove Caption", f"leechset {user_id} cap")
+
+    if dumpid != "⛔":
+        buttons.sbutton("🗑️ Remove Dump", f"leechset {user_id} dump")
 
     button = buttons.build_menu(2)
 
-    text = f'''<u>Leech Settings for <a href='tg://user?id={user_id}'>{name}</a></u>
-    
-Leech Type <b>{ltype}</b>
-Custom Thumbnail <b>{thumbmsg}</b>
-PreName : <b>{prefix}</b>
-Caption : <b>{caption}</b>
-DumpID : <b>{dumpid}</b>
-User Plan : <b>{uplan}</b>'''
+    text = f'''<u>⚙️ Settings <a href='tg://user?id={user_id}'>{name}</a></u>
+
+❖ PLAN: <b>{uplan}</b>
+┌ 🛠 Leech Type ➜ <b>{ltype}</b>
+├ 🖼️ Thumbnail ➜ <b>{thumbmsg}</b>
+├ 🏷 PreName ➜ <b>{prefix}</b>
+├ 📝 Caption ➜ <b>{caption}</b>
+└ 📦 DUMP ➜ <b>{dumpid}</b>'''
     return text, button
 
 def editLeechType(message, query):
@@ -84,7 +86,7 @@ def setLeechType(update, context):
         AS_DOC_USERS.add(user_id)
         if DB_URI is not None:
             DbManger().user_doc(user_id)
-        query.answer(text="Your File Will Deliver As Document!", show_alert=True)
+        query.answer(text="Leech Type ➜ DOCUMENT 📂", show_alert=True)
         editLeechType(message, query)
     elif data[2] == "med":
         if user_id in AS_DOC_USERS:
@@ -92,16 +94,15 @@ def setLeechType(update, context):
         AS_MEDIA_USERS.add(user_id)
         if DB_URI is not None:
             DbManger().user_media(user_id)
-        query.answer(text="Your File Will Deliver As Media!", show_alert=True)
+        query.answer(text="Leech Type ➜ MEDIA 🎥", show_alert=True)
         editLeechType(message, query)
-
     elif data[2] == "thumb":
         path = f"Thumbnails/{user_id}.jpg"
         if ospath.lexists(path):
             osremove(path)
             if DB_URI is not None:
                 DbManger().user_rm_thumb(user_id, path)
-            query.answer(text="Thumbnail Removed!", show_alert=True)
+            query.answer(text="🗑️ Thumbnail Removed!", show_alert=True)
             editLeechType(message, query)
         else:
             query.answer(text="Old Settings", show_alert=True)
@@ -116,19 +117,19 @@ def setLeechType(update, context):
         PRE_DICT.pop(user_id)
         if DB_URI: 
             DbManger().user_pre(user_id, '')
-        query.answer(text="Your Prename is Successfully Deleted!", show_alert=True)
+        query.answer(text="🗑️ PreName Removed!", show_alert=True)
         editLeechType(message, query)
     elif data[2] == "cap":
         CAP_DICT.pop(user_id)
         if DB_URI:
             DbManger().user_cap(user_id, None)
-        query.answer(text="Your Caption is Successfully Deleted!", show_alert=True)
+        query.answer(text="🗑️ Caption Removed!", show_alert=True)
         editLeechType(message, query)
     elif data[2] == "dump":
         LEECH_DICT.pop(user_id)
         if DB_URI:
             DbManger().user_dump(user_id, None)
-        query.answer(text="Your Dump ID is Successfully Deleted!", show_alert=True)
+        query.answer(text="🗑️ Dump Removed!", show_alert=True)
         editLeechType(message, query)
     else:
         query.answer()
